@@ -1,0 +1,23 @@
+# Пример systemd-юнита для монитора.
+# Положить в /etc/systemd/system/monitor.service, затем:
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now monitor
+[Unit]
+Description=System monitor with Telegram alerts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/monitor
+ExecStart=/opt/monitor/monitor --config /opt/monitor/config.yaml
+Restart=always
+RestartSec=10
+
+# На серверах с systemd и песочницей (опционально, если включено):
+# ProtectSystem=strict
+# ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

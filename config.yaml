@@ -1,0 +1,86 @@
+# Мониторинг системы с уведомлениями в Telegram.
+# Один и тот же файл кладётся на каждый сервер.
+# Работает с Go-бинарником (go-monitor/monitor-linux-amd64|arm64).
+
+# Имя хоста для подписей в сообщениях (null = взять из ОС).
+# Должно совпадать с hostname в easytier (имя из `easytier-cli peer`).
+name: null
+
+# Интервал между проверками (минуты, диапазон min..max, каждый цикл выбирается случайно)
+check_interval_min: [5, 10]
+
+telegram:
+  bot_token: "8960750265:AAGVG8-36-HAfUwVadZh64OJGRWlxUEtwLw"
+  chat_id: -5031632365                     # id чата/пользователя, куда слать уведомления
+  # Порядок перебора бэкендов отправки: первый сработавший побеждает, при ошибке пробуем следующий
+  send_order: ["socks5", "mtproto"]
+  alert_cooldown_min: 60              # слать сообщение не чаще раза в час
+  confirm_checks: 3                   # перед алертом проблема должна подтвердиться ещё N проверок подряд
+  notify_recovery: true               # слать ли уведомление о восстановлении
+  # api_id/api_hash для MTProto-подключения (библиотека telethon).
+  # Значения по умолчанию — публичные demo-креды из документации Telethon.
+  api_id: 6
+  api_hash: "eb06d4abfb49dc3eeb1aeb98ae0f581e"
+
+
+backends:
+  socks5:                             # обычный SOCKS5-прокси (идет через Bot API по HTTPS)
+    host: "10.5.0.6"                          # напр. 10.5.0.1
+    port: 1080
+    username: "bork"                      # можно оставить пустыми
+    password: "bork"
+
+thresholds:
+  cpu: 90.0                           # загрузка CPU, %
+  mem: 90.0                           # использование памяти, %
+  disk: 90.0                          # заполненность диска, %
+  temp: 85.0                          # температура CPU, °C (null - отключить)
+  load: null                          # load average за 1 мин (null - отключить)
+  channel_occupancy: null             # загрузка интернет-канала, % (null - отключить)
+
+network:
+  interface: null                     # null = автоопределение по наибольшему трафику
+  channel_capacity_mbps: 100.0        # ёмкость канала для расчёта занятости
+
+internet_check:
+  hosts: ["8.8.8.8:53", "1.1.1.1:53"]
+  timeout_sec: 5
+
+# --- Мультисерверная часть (метрики, /report, лидер-выбор) ---
+
+# Внутренний HTTP-сервер агента (по нему лидер ретранслирует /report и пингует узлы)
+http:
+  bind_host: 0.0.0.0
+  port: 44668
+  auth_token: "ukfpjr-jn-rfhnjirb"  # один общий токен на всех серверах
+
+# Приоритет лидерства по hostname: меньше = выше приоритет (по умолчанию 0).
+# При равенстве приоритетов лидер - по алфавиту имени.
+priority: {}
+
+# Обнаружение участников сети через easytier
+easytier:
+  command: "/usr/local/bin/pnet peers"        # или полный путь, напр. /usr/bin/easytier-cli
+  networks: ["pnet"]                        # пусто = все сети; или напр. ["pnet"]
+  timeout_sec: 15
+
+# Лидер-выбор: пинг каждые heartbeat_sec, смена лидера после failover_sec тишины
+election:
+  heartbeat_sec: 30
+  failover_sec: 90
+  backoff_sec: 60
+
+# Хранение метрик для /report (JSONL-файл, графики рисуются локально через graph.py)
+storage:
+  path: metrics.jsonl
+  retention_days: 3
+
+# Только для локального graph.py: до скольких точек усреднять при отрисовке
+graph:
+  max_points: 4000
+
+# Слушать команды бота (/list, /report). Только лидер фактически опрашивает.
+commands: true
+
+state_file: state.json                # служебный файл (время последнего алерта и т.п.)
+log_file: null                        # null = только в консоль, либо путь к лог-файлу
